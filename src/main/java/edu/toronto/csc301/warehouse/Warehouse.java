@@ -1,73 +1,123 @@
 package edu.toronto.csc301.warehouse;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
 import edu.toronto.csc301.grid.GridCell;
 import edu.toronto.csc301.grid.IGrid;
+import edu.toronto.csc301.robot.GridRobot;
 import edu.toronto.csc301.robot.IGridRobot;
 import edu.toronto.csc301.robot.IGridRobot.Direction;
+import edu.toronto.csc301.warehouse.Warehouse.RobotListener;
 
 public class Warehouse implements IWarehouse, IGridRobot.StepListener {
 	
-	/**
-	 * TODO: Complete the implementation of this class.
-	 * (you can probably use your implementation from A4) 
-	 */
+	IGrid<Rack> floorPlan;
+	// List of robots in warehouse
+	List<IGridRobot> robots = new ArrayList<IGridRobot>();
+	
+	// Map of robots to its direction of last step
+	Map<IGridRobot, IGridRobot.Direction> robot_directions = new HashMap<IGridRobot, IGridRobot.Direction>();
+	
+	// List of listeners of this warehouse
+	private List<Consumer<IWarehouse>> warehouse_listeners = new ArrayList<Consumer<IWarehouse>>();
+	// List of listeners of robots in this warehouse
+	private List<RobotListener> robot_listeners = new ArrayList<RobotListener>();
+	
+	// Whenever the robot that this listener is listening to calls step, it increments all warehouse listeners' count
+	public class RobotListener implements IGridRobot.StepListener {
 
-	
-	
-	public Warehouse(IGrid<Rack> floorPlan) {
-		// TODO Auto-generated constructor stub
+		@Override
+		public void onStepStart(IGridRobot robot, Direction direction) {
+			robot_directions.put(robot, direction);
+			
+			for (Consumer<IWarehouse> l : warehouse_listeners){
+				l.accept(Warehouse.this);
+			}
+			
+		}
+
+		@Override
+		public void onStepEnd(IGridRobot robot, Direction direction) {
+			
+			robot_directions.remove(robot);
+			
+			for (Consumer<IWarehouse> l : warehouse_listeners){
+				l.accept(Warehouse.this);
+			}
+		}
 	}
 	
-	
-
-	@Override
-	public void onStepStart(IGridRobot robot, Direction direction) {
-		// TODO Auto-generated method stub		
+	public Warehouse(IGrid<Rack> grid){
+		if (grid == null){
+			throw new NullPointerException();
+		}
+		this.floorPlan = grid;
 	}
-
-	@Override
-	public void onStepEnd(IGridRobot robot, Direction direction) {
-		// TODO Auto-generated method stub
-		
-	}
-
 	@Override
 	public IGrid<Rack> getFloorPlan() {
-		// TODO Auto-generated method stub
-		return null;
+		return this.floorPlan;
 	}
 
 	@Override
-	public IGridRobot addRobot(GridCell initialLocation) {
-		// TODO Auto-generated method stub
-		return null;
+	public IGridRobot addRobot(GridCell initialLocation) {		
+		// Check if this cell exists
+		if (!this.floorPlan.hasCell(initialLocation)){
+			throw new IllegalArgumentException();
+		}
+		// Check if robot is in this cell already
+		for (IGridRobot current_robot : this.robots){
+			if (current_robot.getLocation() == initialLocation){
+				throw new IllegalArgumentException();
+			}
+		}
+
+		IGridRobot new_robot = (IGridRobot) new GridRobot(initialLocation);
+		this.robots.add(new_robot);
+		// Trigger the warehouse_listeners
+		for (Consumer<IWarehouse> l : warehouse_listeners){
+			l.accept(this);
+		}
+		// Add a robot listener to this robot
+		RobotListener robot_listener = new RobotListener();
+		new_robot.startListening(robot_listener);
+		robot_listeners.add(robot_listener);
+		return new_robot;
 	}
 
 	@Override
 	public Iterator<IGridRobot> getRobots() {
-		// TODO Auto-generated method stub
-		return null;
+		Iterator<IGridRobot> result = this.robots.iterator();
+		
+		return result;
 	}
 
 	@Override
 	public Map<IGridRobot, Direction> getRobotsInMotion() {
-		// TODO Auto-generated method stub
-		return null;
+		Map<IGridRobot, Direction> result = new HashMap<IGridRobot, Direction>(robot_directions);
+		
+		return result;
 	}
 
 	@Override
 	public void subscribe(Consumer<IWarehouse> observer) {
-		// TODO Auto-generated method stub
-		
+		warehouse_listeners.add(observer);
 	}
 
 	@Override
 	public void unsubscribe(Consumer<IWarehouse> observer) {
-		// TODO Auto-generated method stub
+		warehouse_listeners.remove(observer);
+	}
+	@Override
+	public void onStepStart(IGridRobot robot, Direction direction) {
+		
+	}
+	@Override
+	public void onStepEnd(IGridRobot robot, Direction direction) {
 		
 	}
 
