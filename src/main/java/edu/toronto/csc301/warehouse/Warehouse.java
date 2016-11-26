@@ -1,6 +1,7 @@
 package edu.toronto.csc301.warehouse;
 
 import java.util.ArrayList;
+
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -12,7 +13,6 @@ import edu.toronto.csc301.grid.IGrid;
 import edu.toronto.csc301.robot.GridRobot;
 import edu.toronto.csc301.robot.IGridRobot;
 import edu.toronto.csc301.robot.IGridRobot.Direction;
-import edu.toronto.csc301.warehouse.Warehouse.RobotListener;
 
 public class Warehouse implements IWarehouse, IGridRobot.StepListener {
 	
@@ -25,32 +25,7 @@ public class Warehouse implements IWarehouse, IGridRobot.StepListener {
 	
 	// List of listeners of this warehouse
 	private List<Consumer<IWarehouse>> warehouse_listeners = new ArrayList<Consumer<IWarehouse>>();
-	// List of listeners of robots in this warehouse
-	private List<RobotListener> robot_listeners = new ArrayList<RobotListener>();
-	
-	// Whenever the robot that this listener is listening to calls step, it increments all warehouse listeners' count
-	public class RobotListener implements IGridRobot.StepListener {
 
-		@Override
-		public void onStepStart(IGridRobot robot, Direction direction) {
-			robot_directions.put(robot, direction);
-			
-			for (Consumer<IWarehouse> l : warehouse_listeners){
-				l.accept(Warehouse.this);
-			}
-			
-		}
-
-		@Override
-		public void onStepEnd(IGridRobot robot, Direction direction) {
-			
-			robot_directions.remove(robot);
-			
-			for (Consumer<IWarehouse> l : warehouse_listeners){
-				l.accept(Warehouse.this);
-			}
-		}
-	}
 	
 	public Warehouse(IGrid<Rack> grid){
 		if (grid == null){
@@ -82,10 +57,8 @@ public class Warehouse implements IWarehouse, IGridRobot.StepListener {
 		for (Consumer<IWarehouse> l : warehouse_listeners){
 			l.accept(this);
 		}
-		// Add a robot listener to this robot
-		RobotListener robot_listener = new RobotListener();
-		new_robot.startListening(robot_listener);
-		robot_listeners.add(robot_listener);
+		// Listen to this robot
+		new_robot.startListening(this);
 		return new_robot;
 	}
 
@@ -114,11 +87,18 @@ public class Warehouse implements IWarehouse, IGridRobot.StepListener {
 	}
 	@Override
 	public void onStepStart(IGridRobot robot, Direction direction) {
-		
+		robot_directions.put(robot, direction);
+		for (Consumer<IWarehouse> l : warehouse_listeners){
+			l.accept(Warehouse.this);
+		}
 	}
 	@Override
 	public void onStepEnd(IGridRobot robot, Direction direction) {
+		robot_directions.remove(robot);
 		
+		for (Consumer<IWarehouse> l : warehouse_listeners){
+			l.accept(Warehouse.this);
+		}
 	}
 
 	

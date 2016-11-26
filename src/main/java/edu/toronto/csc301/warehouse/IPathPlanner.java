@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import edu.toronto.csc301.grid.GridCell;
+import edu.toronto.csc301.grid.IGrid;
 import edu.toronto.csc301.robot.IGridRobot;
 import edu.toronto.csc301.robot.IGridRobot.Direction;
 
@@ -22,7 +23,12 @@ public interface IPathPlanner {
 	 *   motion? If so, in which direction?)
 	 * @param robot2dest Specifies our goals - Which robots should get to which locations. 
 	 */
-	Entry<IGridRobot, Direction> nextStep(IWarehouse warehouse, 
-			Map<IGridRobot,GridCell> robot2dest);
+	public Entry<IGridRobot, Direction> nextStep();
+	public void addGoal(GridCell goal);
+	public void removeGoal(GridCell goal);
+	public Map<IGridRobot, GridCell> assignGoal();
+	public void updateRobot(IWarehouse warehouse);
+	
+	
 	
 }

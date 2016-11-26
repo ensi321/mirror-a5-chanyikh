@@ -1,5 +1,6 @@
 package edu.toronto.csc301.util;
 
+import java.util.List;
 import java.util.Random;
 
 import edu.toronto.csc301.grid.GridCell;
@@ -32,11 +33,24 @@ public class TestUtil {
 		return new Warehouse(floorPlan);
 	}
 	
-	public static IPathPlanner createPathPlanner() throws Exception {
-		return new PathPlanner();
+	public static IPathPlanner createPathPlanner(IWarehouse house, List<GridCell> goals) throws Exception {
+		return new PathPlanner(house, goals);
 	}
 	
-	
+	public static GridCell oneCellOver(GridCell location, Direction direction){
+		switch (direction) {
+		case NORTH:
+			return GridCell.at(location.x, location.y + 1);
+		case EAST:
+			return GridCell.at(location.x + 1, location.y);
+		case SOUTH:
+			return GridCell.at(location.x, location.y - 1);
+		case WEST:
+			return GridCell.at(location.x - 1, location.y);
+		default:
+			return null;
+		}
+	}
 	
 	
 	public static Direction randomDirection(){
