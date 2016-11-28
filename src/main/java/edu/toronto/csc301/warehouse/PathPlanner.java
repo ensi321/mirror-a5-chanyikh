@@ -1,49 +1,33 @@
 package edu.toronto.csc301.warehouse;
 
 import java.util.AbstractMap;
-
+import java.util.AbstractQueue;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Map.Entry;
-import java.util.function.Consumer;
+import java.util.Queue;
 
 import edu.toronto.csc301.grid.GridCell;
+import edu.toronto.csc301.grid.IGrid;
+import edu.toronto.csc301.robot.GridRobot;
 import edu.toronto.csc301.robot.IGridRobot;
 import edu.toronto.csc301.robot.IGridRobot.Direction;
-import edu.toronto.csc301.warehouse.PathPlanner.Node;
-import edu.toronto.csc301.warehouse.util.*;
 
-public class PathPlanner implements IPathPlanner, Consumer<IWarehouse> {
-
-		
-	private IWarehouse house;
-	private List<GridCell> goals;
-	private List<IGridRobot>robots = new ArrayList<IGridRobot>();
+public class PathPlanner implements IPathPlanner{
 	
+	private IWarehouse house;
+	private List<IGridRobot> movingRobots = new ArrayList<IGridRobot>();
+	private List<GridCell> lockedCells = new ArrayList<GridCell>();
 	// Current BFS stack. Function: Add new node to the stack, pop the first node in stack and expand etc.
 	private Queue<Node> BFS_stack = new LinkedList<Node>();
 	// Keep track of all gridcells that the robot has been visited, to prevent cycle
 	private List<GridCell> node_visited = new ArrayList<GridCell>();
-	public PathPlanner(IWarehouse house, List<GridCell> goals){
-		this.house = house;
-		if (goals != null){
-			this.goals = goals;
-		}
-		else {
-			this.goals = new ArrayList<GridCell>();
-		}
-		Iterator<IGridRobot> robot_iterator = house.getRobots();
-		while (robot_iterator.hasNext()){
-			this.robots.add(robot_iterator.next());
-		}
-		// Subscribe to warehouse
-		this.house.subscribe(this);
+	public PathPlanner(){
+		
 	}
 	
 	// This is node of the tree
@@ -72,12 +56,57 @@ public class PathPlanner implements IPathPlanner, Consumer<IWarehouse> {
 		
 	}
 	
+	@Override
+	public Entry<IGridRobot, Direction> nextStep(IWarehouse warehouse, Map<IGridRobot, GridCell> robot2dest) throws WaitForOthersException, nextStepNotFoundException {
+		this.house = warehouse;
+		// Find the first robot that is not on dest
+		Iterator<Entry<IGridRobot, GridCell>> robot_iter = robot2dest.entrySet().iterator();
+		Entry<IGridRobot, GridCell> entry = null;
+		while (true){
+			if (robot_iter.hasNext()){
+				entry = robot_iter.next();
+				// If this robot is not on dest, and this robot is not moving, then choose this
+				if (!robotOnDest(entry) && !movingRobots.contains(entry.getKey())){
+					break;
+				}
+			}
+			else{
+				// Return done if there is no more moving robots
+				if (movingRobots.size() == 0){
+					return null;
+				}
+				// Else, throw an exception saying we need to wait for other robots to move
+				throw new WaitForOthersException();
+			}
+		}
 
-	public Direction BFS(Node root, GridCell dest){
+		IGridRobot robot = entry.getKey();
+		GridCell dest = entry.getValue();
+
+		// Add root to the stack
+		Node root = new Node(robot.getLocation(), null);
+		BFS_stack.add(root);
+		try {
+			Direction direction = BFS(root, dest);
+			Entry<IGridRobot, Direction> result = new AbstractMap.SimpleEntry<IGridRobot, Direction>(robot, direction);
+			
+			BFS_stack = new LinkedList<Node>();
+			node_visited = new ArrayList<GridCell>();
+			return result;
+		}catch (nextStepNotFoundException e){
+			System.out.println("Robot "+ robot.toString() + " cannot find path at " + dest.toString());
+			throw e;
+		}
+
+	}
+
+	public Direction BFS(Node root, GridCell dest) throws nextStepNotFoundException{
 		Node current_node = new Node(null, null);
 		while (BFS_stack.size() != 0){
 			// Pop the first node in the stack
+//			System.out.println("---------------");
 			current_node = BFS_stack.poll();
+//			printNode(current_node);
 			// Check if this node is our dest
 			if (dest.equals(current_node.getLocation())){
 				break;
@@ -85,19 +114,23 @@ public class PathPlanner implements IPathPlanner, Consumer<IWarehouse> {
 			
 			// Expand it and insert all its children into the stack
 			List<Node> children = findChildren(current_node);
+			
 			// Add all children into the stack
 			for (Node child : children){
+//				printNode(child);
 				BFS_stack.add(child);
 			}
-
+//			System.out.println("---------------");
 			// Add current_node into node_visited
 			node_visited.add(current_node.getLocation());
+//			System.out.println(BFS_stack.size());
 		}
 		
 		// Return error if we cant find anything
-		if (current_node.getParent() == null){
-			throw new IllegalArgumentException();
+		if (!dest.equals(current_node.getLocation())){
+			throw new nextStepNotFoundException();
 		}
+
 		
 		// Start doing a backtrace
 		// Trace back until a node's parent is root
@@ -150,7 +183,15 @@ public class PathPlanner implements IPathPlanner, Consumer<IWarehouse> {
 		if (node_visited.contains(cell)){
 			return true;
 		}
-		
+		// If this cell is locked
+		if (lockedCells.contains(cell)){
+			return true;
+		}
+		for (Node n : BFS_stack){
+			if(n.getLocation().equals(cell)){
+				return true;
+			}
+		}
 		return false;
 	}
 	
@@ -185,6 +226,32 @@ public class PathPlanner implements IPathPlanner, Consumer<IWarehouse> {
 		
 		return result;
 	}
+	// Check if robot is on destination already
+	public boolean robotOnDest(Entry<IGridRobot, GridCell> entry){
+		GridCell robot_cell = entry.getKey().getLocation();
+		GridCell dest = entry.getValue();
+		if (robot_cell.equals(dest)){
+			return true;
+		}
+		return false;
+	}
+	// Given robot is heading to direction, we will lock up this robot, and the cell the robot is about to step to
+	// So that if other threads come call for nextStep, pathPlanner will not considerr this robot and this cell
+	public void lock(IGridRobot robot, Direction direction){
+		movingRobots.add(robot);
+		lockedCells.add(GridRobot.oneCellOver(robot.getLocation(), direction));
+	}
+	
+	public void unlock(IGridRobot robot){
+		movingRobots.remove(robot);
+		lockedCells.remove(robot.getLocation());
+	}
+	
+	@Override
+	public List<IGridRobot> getLockedRobot() {
+		// TODO Auto-generated method stub
+		return this.movingRobots;
+	}
 	
 	// Debug function, print out stuff inside node
 	public void printNode(Node n){
@@ -200,99 +267,6 @@ public class PathPlanner implements IPathPlanner, Consumer<IWarehouse> {
 		System.out.println(s);
 	}
 
-	@Override
-	public Entry<IGridRobot, Direction> nextStep() {
-		// This is assignment of robot to dest 
-		Map<IGridRobot, GridCell> robot2dest = assignGoal();
-		// Find the robot:dest pair that has the lowest cost but not already at goal
-		Iterator<Entry<IGridRobot, GridCell>> iter = robot2dest.entrySet().iterator();
-		Entry<IGridRobot, GridCell> entry = null;
-		double min_cost = Double.POSITIVE_INFINITY;
-		while (iter.hasNext()){
-			Entry<IGridRobot, GridCell> current_entry = iter.next();
-			double current_cost = hamiltonDistance(current_entry.getKey(), current_entry.getValue());
-			if (current_cost < min_cost && current_cost > 0){
-				entry = current_entry;
-				min_cost = current_cost;
-			}
-		}
-		// If cost of all robot:dest pair are 0, this means we are done
-		if (entry == null){
-			return null;
-		}
-		IGridRobot robot = entry.getKey();
-		GridCell dest = entry.getValue();
-		// Add root to the stack
-		Node root = new Node(robot.getLocation(), null);
-		BFS_stack.add(root);
-		Direction direction = BFS(root, dest);
-		Entry<IGridRobot, Direction> result = new AbstractMap.SimpleEntry<IGridRobot, Direction>(robot, direction);
-		
-		BFS_stack = new LinkedList<Node>();
-		node_visited = new ArrayList<GridCell>();
-		
-		return result;
 
-	}
-
-	@Override
-	public void addGoal(GridCell goal) {
-		this.goals.add(goal);
-	}
-
-	@Override
-	public void removeGoal(GridCell goal) {
-		this.goals.remove(goal);
-		
-	}
-
-	// Assign each robot to a goal
-	@Override
-	public Map<IGridRobot, GridCell> assignGoal() {
-		// Construct a cost matrix for hungarian algorithm
-		double[][] cost = new double[robots.size()][goals.size()];
-		for (int i = 0; i < robots.size(); i++){
-			IGridRobot current_robot = robots.get(i);
-			for (int j = 0; j < goals.size(); j++){
-				GridCell current_goal = goals.get(j);
-				cost[i][j] = hamiltonDistance(current_robot, current_goal);
-			}
-		}
-		HungarianAlgorithm h = new HungarianAlgorithm(cost);
-		int[] assignment = h.execute();
-		Map<IGridRobot, GridCell> robot2dest = new HashMap<IGridRobot, GridCell>();
-		for (int i = 0; i < assignment.length; i++){
-			robot2dest.put(robots.get(i), goals.get(assignment[i]));
-		}
-		return robot2dest;
-	}
-
-	@Override
-	public void updateRobot(IWarehouse warehouse) {
-		this.robots = new ArrayList<IGridRobot>();
-		Iterator<IGridRobot> robot_iterator = warehouse.getRobots();
-		while (robot_iterator.hasNext()){
-			this.robots.add(robot_iterator.next());
-		}
-		
-	}
-
-	// When there is any update to the house, update the robots
-	@Override
-	public void accept(IWarehouse t) {
-		updateRobot(t);
-		
-	}
-	// Given robot at (x1, y1) and cell at (x2, y2)
-	// Return |x1 - x2| + |y1 - y2|
-	public double hamiltonDistance(IGridRobot robot, GridCell cell){
-		return Math.abs(robot.getLocation().x - cell.x) + Math.abs(robot.getLocation().y - cell.y);
-	}
-	
-	public static void main(String [] args){
-		  double [][] a = {{7, 10, 5}, {4, 8, 3}};
-		  HungarianAlgorithm h = new HungarianAlgorithm(a);
-		  int[] result = h.execute();
-		  System.out.println(Arrays.toString(result));
-	}
 }
+	

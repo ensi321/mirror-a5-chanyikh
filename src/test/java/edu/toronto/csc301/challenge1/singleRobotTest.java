@@ -1,6 +1,7 @@
 package edu.toronto.csc301.challenge1;
 
 import static edu.toronto.csc301.util.TestUtil.createPathPlanner;
+
 import static edu.toronto.csc301.util.TestUtil.createWarehouse;
 import static edu.toronto.csc301.util.TestUtil.randomInt;
 import static edu.toronto.csc301.util.TestUtil.randomDirection;
@@ -25,12 +26,13 @@ import edu.toronto.csc301.util.SimpleGridImpl;
 import edu.toronto.csc301.util.Counter;
 import edu.toronto.csc301.warehouse.IPathPlanner;
 import edu.toronto.csc301.warehouse.IWarehouse;
+import edu.toronto.csc301.warehouse.nextStepNotFoundException;
 
 public class singleRobotTest {
 	
 	
-	@Rule
-    public Timeout globalTimeout = Timeout.seconds(5);
+//	@Rule
+//    public Timeout globalTimeout = Timeout.seconds(20);
 	
 	
 	
@@ -40,7 +42,6 @@ public class singleRobotTest {
 	
 	private IPathPlanner pathPlanner;
 	private IWarehouse warehouse;
-	
 	@Before
 	public void setup() throws Exception{
 		warehouse = createWarehouse(
@@ -67,11 +68,10 @@ public class singleRobotTest {
 		
 		// Set the robot's final destination to be (0,0) 
 		Map<IGridRobot, GridCell> robot2dest = new HashMap<IGridRobot,GridCell>();
-		pathPlanner.addGoal(GridCell.at(0, 0));
-//		robot2dest.put(robot, GridCell.at(0, 0));
+		robot2dest.put(robot, GridCell.at(0, 0));
 		
 		// Since the robot is already at its destination, there is no next step
-		assertNull(pathPlanner.nextStep());
+		assertNull(pathPlanner.nextStep(warehouse, robot2dest));
 	}
 	
 	
@@ -85,12 +85,11 @@ public class singleRobotTest {
 		IGridRobot robot = warehouse.addRobot(initialLocation);
 		
 		// Set the robot's final destination to be one cell over  
-//		Map<IGridRobot, GridCell> robot2dest = new HashMap<IGridRobot,GridCell>();
-//		robot2dest.put(robot, oneCellOver(initialLocation, stepDirection));
-		pathPlanner.addGoal(oneCellOver(initialLocation, stepDirection));
+		Map<IGridRobot, GridCell> robot2dest = new HashMap<IGridRobot,GridCell>();
+		robot2dest.put(robot, oneCellOver(initialLocation, stepDirection));
 		
 		// The planner should return the correct next step 
-		Entry<IGridRobot, Direction> result = pathPlanner.nextStep();
+		Entry<IGridRobot, Direction> result = pathPlanner.nextStep(warehouse, robot2dest);
 		assertEquals(robot, result.getKey());
 		assertEquals(stepDirection, result.getValue());
 	}
@@ -111,15 +110,14 @@ public class singleRobotTest {
 		IGridRobot robot = warehouse.addRobot(initialLocation);
 		
 		// Set the robot's final destination  
-//		Map<IGridRobot, GridCell> robot2dest = new HashMap<IGridRobot,GridCell>();
-//		robot2dest.put(robot, destination);
-		pathPlanner.addGoal(destination);
+		Map<IGridRobot, GridCell> robot2dest = new HashMap<IGridRobot,GridCell>();
+		robot2dest.put(robot, destination);
 		
 		// The planner should get the robot to the destination (and do it efficiently)
 		int stepLimit = deltaX + deltaY;
 		int stepCount = 0;
 		while(stepCount < stepLimit){
-			Entry<IGridRobot, Direction> nextStep = pathPlanner.nextStep();
+			Entry<IGridRobot, Direction> nextStep = pathPlanner.nextStep(warehouse, robot2dest);
 			IGridRobot r = nextStep.getKey();
 			
 			// Take the step ...
@@ -132,7 +130,27 @@ public class singleRobotTest {
 			assertEquals(stepLimit - stepCount, distance);
 		}
 	}
-	
+	@Test(expected=nextStepNotFoundException.class)
+	public void returnNextStepNotFoundExceptionWhenDestIsUnreasonable() throws Exception{
+		GridCell destination = GridCell.at(25, 25);
+		// Add the robot
+		IGridRobot robot = warehouse.addRobot(GridCell.at(10, 10));
+		
+		// Set the robot's final destination  
+		Map<IGridRobot, GridCell> robot2dest = new HashMap<IGridRobot,GridCell>();
+		robot2dest.put(robot, destination);
+		Entry<IGridRobot, Direction> nextStep = pathPlanner.nextStep(warehouse, robot2dest);
+		while (nextStep != null){
+			IGridRobot r = nextStep.getKey();
+			System.out.println("==========================");
+			System.out.println(r.toString());
+			System.out.println(nextStep.getValue());
+			// Take the step ...
+			r.step(nextStep.getValue());
+			nextStep = pathPlanner.nextStep(warehouse, robot2dest);
+		}
+		
+	}
 	
 	
 	// ------------------------------------------------------------------------
@@ -149,16 +167,15 @@ public class singleRobotTest {
 	public void thePlannerMustNotTriggerAnyAction() throws Exception {
 		IGridRobot robot = warehouse.addRobot(GridCell.at(4, 4));
 		  
-//		Map<IGridRobot, GridCell> robot2dest = new HashMap<IGridRobot,GridCell>();
-//		robot2dest.put(robot, GridCell.at(6, 5));
-		pathPlanner.addGoal(GridCell.at(6, 5));
+		Map<IGridRobot, GridCell> robot2dest = new HashMap<IGridRobot,GridCell>();
+		robot2dest.put(robot, GridCell.at(6, 5));
 		
 		// Attach a listener to the warehouse 
 		Counter<IWarehouse> listener = new Counter<IWarehouse>();
 		warehouse.subscribe(listener);
 		
 		// Use the planner
-		pathPlanner.nextStep();
+		pathPlanner.nextStep(warehouse, robot2dest);
 		
 		// Make sure that the planner didn't trigger the listener
 		assertEquals(0, listener.getCount());

@@ -34,7 +34,7 @@ public class TestUtil {
 	}
 	
 	public static IPathPlanner createPathPlanner(IWarehouse house, List<GridCell> goals) throws Exception {
-		return new PathPlanner(house, goals);
+		return new PathPlanner();
 	}
 	
 	public static GridCell oneCellOver(GridCell location, Direction direction){
