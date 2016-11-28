@@ -1,4 +1,4 @@
-package edu.toronto.csc301.challenge1;
+package edu.toronto.csc301.pathPlannerTest;
 
 import static edu.toronto.csc301.util.TestUtil.createPathPlanner;
 
@@ -130,8 +130,8 @@ public class singleRobotTest {
 			assertEquals(stepLimit - stepCount, distance);
 		}
 	}
-	@Test(expected=nextStepNotFoundException.class)
-	public void returnNextStepNotFoundExceptionWhenDestIsUnreasonable() throws Exception{
+	@Test(expected=IllegalArgumentException.class)
+	public void returnIllegalArgumentExceptionWhenDestIsUnreasonable() throws Exception{
 		GridCell destination = GridCell.at(25, 25);
 		// Add the robot
 		IGridRobot robot = warehouse.addRobot(GridCell.at(10, 10));

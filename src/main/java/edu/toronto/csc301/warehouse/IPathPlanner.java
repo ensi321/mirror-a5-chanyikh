@@ -27,5 +27,4 @@ public interface IPathPlanner {
 			Map<IGridRobot,GridCell> robot2dest) throws Exception;
 	void lock(IGridRobot robot, IGridRobot.Direction direction);
 	void unlock(IGridRobot robot);
-	List<IGridRobot> getLockedRobot();
 }
